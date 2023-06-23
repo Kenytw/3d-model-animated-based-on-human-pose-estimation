@@ -15,6 +15,7 @@ let then = Date.now();
 let interval = 1000/fps;
 let delta;
 let pause = false;
+let camera_rotate = true;
 
 init();
 
@@ -28,6 +29,7 @@ function createPanel() {
     settings = {
         'show model': true,
         'show skeleton': false,
+	'rotate camera': true,
         'pause/continue': pauseContinue,
         'make single step': toSingleStepMode,
         'modify time scale': 1.0
@@ -35,12 +37,17 @@ function createPanel() {
 
     folder1.add( settings, 'show model' ).onChange( showModel );
     folder1.add( settings, 'show skeleton' ).onChange( showSkeleton );
+    folder1.add( settings, 'rotate camera' ).onChange( rotateCamera );
     folder2.add( settings, 'pause/continue' );
     folder2.add( settings, 'make single step' );
     folder3.add( settings, 'modify time scale', 0.0, 1.5, 0.01 ).onChange( modifyTimeScale );
     folder1.open();
     folder2.open();
     folder3.open();
+}
+
+function rotateCamera() {
+    camera_rotate = !camera_rotate;
 }
 
 function pauseContinue() {
@@ -90,6 +97,11 @@ function init(){
     mesh.rotation.x = - Math.PI / 2;
     mesh.receiveShadow = true;
     scene.add( mesh );
+
+    const grid = new THREE.GridHelper( 200, 40, 0x000000, 0x000000 );
+    grid.material.opacity = 0.2;
+    grid.material.transparent = true;
+    scene.add( grid );
 
     camera = new THREE.PerspectiveCamera(
         65,
@@ -246,6 +258,9 @@ function onWindowResize() {
     render();
 }
 
+const offset = new THREE.Vector3();
+const distance = 3;
+
 function animate() {
     interval = 1000 / fps;
     requestAnimationFrame(animate);
@@ -256,6 +271,15 @@ function animate() {
             then = now - (delta % interval);
 
             setupPos();
+
+	    if (camera_rotate) {
+                offset.x = distance * Math.sin(now * 0.0005);
+                offset.z = distance * Math.cos(now * 0.0005);
+
+                camera.position.copy(model.position).add(offset);
+                camera.position.y = 1.5;
+                camera.lookAt(model.position);
+            }
 
             controls.update();
             render();
@@ -296,8 +320,18 @@ function setupPos() {
 }
 
 function poseAngles(joint, frame_num) {
-    //if (pause === true) return;
     if (Object.keys(body_pose.result[frame_num]).length === 0) return;
+
+    if (body_pose.result[frame_num].landmark31.y < body_pose.result[frame_num].landmark23.y || body_pose.result[frame_num].landmark32.y < body_pose.result[frame_num].landmark24.y) {
+        if (joint === model.hips) {
+            frame++;
+            if (frame > Object.keys(body_pose.result).length - 1) frame = 0;
+            return;
+        }else{
+            return;
+        }
+    }
+	
     const pose_left_shoulder = new THREE.Vector3(body_pose.result[frame_num].landmark11.x, -body_pose.result[frame_num].landmark11.y, -body_pose.result[frame_num].landmark11.z);
     const pose_right_shoulder = new THREE.Vector3(body_pose.result[frame_num].landmark12.x, -body_pose.result[frame_num].landmark12.y, -body_pose.result[frame_num].landmark12.z);
     const pose_left_elbow = new THREE.Vector3(body_pose.result[frame_num].landmark13.x, -body_pose.result[frame_num].landmark13.y, -body_pose.result[frame_num].landmark13.z);
@@ -413,21 +447,29 @@ function poseAngles(joint, frame_num) {
         point_child = pose_left_hand_index_1;
     }
     else if (joint === model.left_up_leg) {
+	if (model.hips.rotation.y > 1 || model.hips.rotation.y < -1) return;
+	    
         point_parent = pose_hips;
         point_articulation = pose_left_hip;
         point_child = pose_left_knee;
     }
     else if (joint === model.right_up_leg) {
+	if (model.hips.rotation.y > 1 || model.hips.rotation.y < -1) return;
+	    
         point_parent = pose_hips;
         point_articulation = pose_right_hip;
         point_child = pose_right_knee;
     }
     else if (joint === model.left_leg) {
+	if (model.hips.rotation.y > 1 || model.hips.rotation.y < -1) return;
+	    
         point_parent = pose_left_hip;
         point_articulation = pose_left_knee;
         point_child = pose_left_ankle;
     }
     else if (joint === model.right_leg) {
+	if (model.hips.rotation.y > 1 || model.hips.rotation.y < -1) return;
+	    
         point_parent = pose_right_hip;
         point_articulation = pose_right_knee;
         point_child = pose_right_ankle;
